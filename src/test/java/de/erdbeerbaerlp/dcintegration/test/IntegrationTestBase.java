@@ -8,13 +8,18 @@ import de.erdbeerbaerlp.dcintegration.test.mocks.MockMcServerInterface;
 import de.erdbeerbaerlp.dcintegration.test.util.DiscordEventSimulator;
 import de.erdbeerbaerlp.dcintegration.test.util.MinecraftEventSimulator;
 import de.erdbeerbaerlp.dcintegration.test.util.TestConfigHelper;
+import de.erdbeerbaerlp.dcintegration.test.util.WorkThreadTestHelper;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.when;
+
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,11 +45,19 @@ public abstract class IntegrationTestBase {
         Configuration.instance().loadConfig();
         Localization.instance().loadConfig();
         
-        // Set up default channel ID in config
+        // Set up default channel ID in config - MUST be after loadConfig() to override defaults
+        // The default botChannel is "000000000" which won't work with our mocks
         Configuration.instance().general.botChannel = defaultChannelID;
         Configuration.instance().advanced.serverChannelID = defaultChannelID;
         Configuration.instance().advanced.chatInputChannelID = "default";
         Configuration.instance().webhook.enable = false; // Disable webhooks for simpler testing
+        
+        // Save the config to ensure our changes persist
+        try {
+            Configuration.instance().saveConfig();
+        } catch (Exception e) {
+            // Ignore save errors in tests
+        }
         
         // Create mock interfaces
         mockMC = new MockMcServerInterface();
@@ -54,7 +67,11 @@ public abstract class IntegrationTestBase {
         mockJDA = mockJDAFactory.createMockJDA();
         
         // Create mock channel
-        mockJDAFactory.createMockTextChannel(defaultChannelID);
+        var mockChannel = mockJDAFactory.createMockTextChannel(defaultChannelID);
+        
+        // Setup guild to return the channel when searched
+        var mockGuild = mockJDAFactory.getMockGuild();
+        when(mockGuild.getChannels(anyBoolean())).thenReturn(List.of(mockChannel));
         
         // Create DiscordIntegration instance
         discordIntegration = new DiscordIntegration(mockMC);
@@ -65,6 +82,35 @@ public abstract class IntegrationTestBase {
         
         // Wait a bit for initialization
         Thread.sleep(100);
+        
+        // Manually populate the channel cache to ensure getChannel() works
+        // This bypasses retrieveChannel() which might not work correctly with mocks
+        // We need to populate both the direct ID and "default" since getChannel() converts "default" to botChannel
+        try {
+            java.lang.reflect.Field cacheField = DiscordIntegration.class.getDeclaredField("channelCache");
+            cacheField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.HashMap<String, net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel> cache = 
+                (java.util.HashMap<String, net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel>) cacheField.get(discordIntegration);
+            
+            // Populate cache with the channel ID
+            cache.put(defaultChannelID, mockChannel);
+            
+            // Also populate with "default" key since getChannel("default") converts to botChannel
+            // But getChannel() already does this conversion, so we just need the botChannel ID
+            
+            // Verify it works - getChannel() may convert the ID, so check what's actually in cache
+            var retrievedChannel = discordIntegration.getChannel(defaultChannelID);
+            if (retrievedChannel == null) {
+                // Debug: check what's in the cache
+                System.err.println("Cache contents: " + cache.keySet());
+                System.err.println("Looking for channel ID: " + defaultChannelID);
+                System.err.println("Bot channel config: " + Configuration.instance().general.botChannel);
+                throw new RuntimeException("Failed to retrieve mock channel even after cache injection. Channel ID: " + defaultChannelID);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to set up mock channel cache", e);
+        }
         
         // Create event simulators
         mcEventSimulator = new MinecraftEventSimulator(discordIntegration);
@@ -150,10 +196,11 @@ public abstract class IntegrationTestBase {
     }
     
     /**
-     * Helper to wait for async operations to complete
+     * Helper to wait for async operations to complete.
+     * Uses WorkThreadTestHelper to properly wait for WorkThread jobs.
      */
     protected void waitForAsyncOperations() throws InterruptedException {
-        Thread.sleep(200); // Give time for WorkThread jobs to complete
+        WorkThreadTestHelper.waitForWorkThreadJobs(3000); // 3 second timeout
     }
     
     /**

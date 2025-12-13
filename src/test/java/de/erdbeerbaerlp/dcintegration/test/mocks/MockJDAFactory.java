@@ -5,6 +5,8 @@ import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.requests.RestAction;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
@@ -17,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doAnswer;
 
 /**
  * Factory for creating mocked JDA instances for testing.
@@ -85,29 +88,50 @@ public class MockJDAFactory {
             return channels.get(channelID);
         }
         
+        // Create as TextChannel (which extends StandardGuildMessageChannel)
         TextChannel channel = Mockito.mock(TextChannel.class);
         when(channel.getId()).thenReturn(channelID);
         when(channel.getIdLong()).thenReturn(Long.parseLong(channelID));
         when(channel.getGuild()).thenReturn(mockGuild);
         when(channel.getName()).thenReturn("test-channel");
         
-        // Mock sendMessage to capture messages
-        when(channel.sendMessage(any(MessageCreateData.class))).thenAnswer((Answer<CompletableFuture<Message>>) invocation -> {
-            MessageCreateData data = invocation.getArgument(0);
-            sentMessages.computeIfAbsent(channelID, k -> new ArrayList<>()).add(new SentDiscordMessage(channelID, data));
+        // Mock sendMessage to return MessageCreateAction, then mock submit() to capture messages
+        // JDA's channel.sendMessage() returns MessageCreateAction, not just RestAction
+        when(channel.sendMessage(any(MessageCreateData.class))).thenAnswer((Answer<MessageCreateAction>) invocation -> {
+            // Capture the MessageCreateData from the sendMessage call
+            final MessageCreateData data = invocation.getArgument(0);
             
-            // Create a mock message
-            Message mockMessage = Mockito.mock(Message.class);
-            when(mockMessage.getIdLong()).thenReturn(System.currentTimeMillis());
-            when(mockMessage.getId()).thenReturn(String.valueOf(System.currentTimeMillis()));
+            // Create a mock MessageCreateAction that will capture the message when submit() is called
+            @SuppressWarnings("unchecked")
+            MessageCreateAction messageCreateAction = Mockito.mock(MessageCreateAction.class);
             
-            CompletableFuture<Message> future = new CompletableFuture<>();
-            future.complete(mockMessage);
-            return future;
+            // Mock submit() to capture the message and return CompletableFuture
+            when(messageCreateAction.submit()).thenAnswer((Answer<CompletableFuture<Message>>) submitInvocation -> {
+                // Capture the message when submit() is called
+                sentMessages.computeIfAbsent(channelID, k -> new ArrayList<>()).add(new SentDiscordMessage(channelID, data));
+                
+                // Create a mock message
+                Message mockMessage = Mockito.mock(Message.class);
+                when(mockMessage.getIdLong()).thenReturn(System.currentTimeMillis());
+                when(mockMessage.getId()).thenReturn(String.valueOf(System.currentTimeMillis()));
+                
+                CompletableFuture<Message> future = new CompletableFuture<>();
+                future.complete(mockMessage);
+                return future;
+            });
+            
+            return messageCreateAction;
         });
         
-        // Mock getTextChannelById
+        // Mock getTextChannelById - JDA's getTextChannelById accepts String
+        // But we also need to mock the long version in case it's called
         when(mockJDA.getTextChannelById(channelID)).thenReturn(channel);
+        try {
+            long channelIdLong = Long.parseLong(channelID);
+            when(mockJDA.getTextChannelById(channelIdLong)).thenReturn(channel);
+        } catch (NumberFormatException e) {
+            // Channel ID is not a valid long, skip long mock
+        }
         
         channels.put(channelID, channel);
         return channel;

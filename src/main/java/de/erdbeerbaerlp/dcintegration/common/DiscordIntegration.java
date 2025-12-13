@@ -1068,8 +1068,12 @@ public class DiscordIntegration {
                             avatarURL = dc.getUser().getAvatarUrl();
                         }
                 }
-                if (avatarURL != null && avatarURL.isEmpty())
-                    avatarURL = getSkinURL().replace("%uuid%", uUUID.toString()).replace("%uuid_dashless%", uUUID.toString().replace("-", "")).replace("%name%", pName).replace("%randomUUID%", UUID.randomUUID().toString());
+                if (avatarURL != null && avatarURL.isEmpty()) {
+                    String skinURL = getSkinURL();
+                    if (skinURL != null) {
+                        avatarURL = skinURL.replace("%uuid%", uUUID.toString()).replace("%uuid_dashless%", uUUID.toString().replace("-", "")).replace("%name%", pName).replace("%randomUUID%", UUID.randomUUID().toString());
+                    }
+                }
             }
             if (isServerMessage) {
                 avatarURL = Configuration.instance().webhook.serverAvatarURL;
@@ -1096,6 +1100,7 @@ public class DiscordIntegration {
      * Gets the skin url currently in use
      */
     public String getSkinURL(){
+        if (apiTest == null) return null;
         return apiTest.getSkinURL();
     }
 }
