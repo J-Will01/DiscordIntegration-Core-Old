@@ -1,6 +1,8 @@
 package de.erdbeerbaerlp.dcintegration.common;
 
 import club.minnced.discord.webhook.external.JDAWebhookClient;
+import club.minnced.discord.webhook.send.WebhookEmbed;
+import club.minnced.discord.webhook.send.WebhookEmbedBuilder;
 import club.minnced.discord.webhook.send.WebhookMessageBuilder;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -965,10 +967,63 @@ public class DiscordIntegration {
             try {
                 if (Configuration.instance().webhook.enable) {
                     if (isChatMessage) message.setIsChatMessage();
+                    
+                    // Check if we should use colored embed for linked players with useDiscordNameInChannel
+                    boolean useColoredEmbed = false;
+                    int roleColor = 0;
+                    if (isChatMessage && !uuid.equals("0000000")) {
+                        try {
+                            final UUID uUUID = UUID.fromString(uuid);
+                            if (LinkManager.isPlayerLinked(uUUID)) {
+                                final PlayerLink l = LinkManager.getLink(null, uUUID);
+                                if (l.settings.useDiscordNameInChannel) {
+                                    final Member dc = getMemberById(Long.parseLong(l.discordID));
+                                    if (dc != null) {
+                                        roleColor = dc.getColorRaw();
+                                        if (roleColor != 0) {
+                                            useColoredEmbed = true;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Ignore errors, fall back to normal webhook
+                        }
+                    }
+                    
                     final ArrayList<WebhookMessageBuilder> messages = message.buildWebhookMessages();
+                    final int finalRoleColor = roleColor;
+                    final boolean finalUseColoredEmbed = useColoredEmbed;
                     messages.forEach((builder) -> {
-                        builder.setUsername(name);
-                        builder.setAvatarUrl(avatarURL);
+                        if (finalUseColoredEmbed && isChatMessage) {
+                            // Use embed with colored author instead of webhook username
+                            // This allows the name to be colored with the Discord role color
+                            // Note: The "APP" tag cannot be removed - it's a Discord client-side feature
+                            final WebhookEmbedBuilder embedBuilder = new WebhookEmbedBuilder();
+                            embedBuilder.setAuthor(new WebhookEmbed.EmbedAuthor(name, avatarURL, null));
+                            embedBuilder.setColor(finalRoleColor);
+                            
+                            // Get message content - check if builder already has content, or use message content
+                            String msgContent = message.getMessage();
+                            if (msgContent == null || msgContent.isEmpty()) {
+                                // Try to get content from the builder if available
+                                // Note: WebhookMessageBuilder doesn't expose getContent(), so we use message content
+                                msgContent = "";
+                            }
+                            if (!msgContent.isEmpty()) {
+                                embedBuilder.setDescription(msgContent);
+                            }
+                            
+                            // Clear any existing content and use embed instead
+                            builder.setContent(null);
+                            builder.setUsername(""); // Empty username to minimize the "APP" tag visibility
+                            builder.setAvatarUrl(""); // No avatar on webhook, use embed author avatar
+                            builder.addEmbeds(embedBuilder.build());
+                        } else {
+                            // Normal webhook behavior
+                            builder.setUsername(name);
+                            builder.setAvatarUrl(avatarURL);
+                        }
                         final JDAWebhookClient webhookCli = getWebhookCli(channel.getId());
                         if (webhookCli != null) {
                             webhookCli.send(builder.build()).thenAccept((a)-> rememberRecentMessage(a.getId(),  uuid.equals("0000000")?null:UUID.fromString(uuid)));
