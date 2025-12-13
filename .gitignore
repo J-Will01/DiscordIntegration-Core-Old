@@ -1,5 +1,59 @@
-# Project exclude paths
-/.gradle/
-/build/
+# Gradle
+.gradle/
+build/
+bin/
+out/
+
+# IDE
 .idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
 debug.log
+
+# Test results
+test-results/
+build/reports/
+build/test-results/
+
+# Generated files
+build/generated/
+build/tmp/
+build/docs/
+
+# JAR files (build artifacts)
+build/libs/*.jar
+!build/libs/*-sources.jar
+!build/libs/*-javadoc.jar
+
+# Eclipse
+.metadata/
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+
+# IntelliJ IDEA
+*.iml
+.idea/
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
