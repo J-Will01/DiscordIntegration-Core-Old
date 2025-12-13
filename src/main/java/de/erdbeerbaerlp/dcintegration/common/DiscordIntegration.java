@@ -1070,6 +1070,11 @@ public class DiscordIntegration {
                         if (l.settings.useDiscordNameInChannel) {
                             pName = dc.getEffectiveName();
                             avatarURL = dc.getUser().getAvatarUrl();
+                            // If Discord user has no custom avatar, avatarURL will be null
+                            // Set to empty string so fallback logic works
+                            if (avatarURL == null) {
+                                avatarURL = "";
+                            }
                         }
                 }
                 if (avatarURL != null && avatarURL.isEmpty()) {
