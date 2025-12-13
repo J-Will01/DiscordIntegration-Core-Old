@@ -120,11 +120,47 @@ public class Configuration {
             return;
         }
         INSTANCE = new Toml().read(configFile).to(Configuration.class);
+        // Ensure messagePatterns is initialized and patterns array has no nulls
+        if (INSTANCE.messagePatterns == null) {
+            INSTANCE.messagePatterns = new MessagePatterns();
+        }
+        if (INSTANCE.messagePatterns.patterns == null) {
+            INSTANCE.messagePatterns.patterns = new MessagePatterns.MessagePattern[0];
+        } else {
+            // Filter out any null elements from the array
+            int nonNullCount = 0;
+            for (MessagePatterns.MessagePattern pattern : INSTANCE.messagePatterns.patterns) {
+                if (pattern != null) nonNullCount++;
+            }
+            if (nonNullCount < INSTANCE.messagePatterns.patterns.length) {
+                MessagePatterns.MessagePattern[] filtered = new MessagePatterns.MessagePattern[nonNullCount];
+                int idx = 0;
+                for (MessagePatterns.MessagePattern pattern : INSTANCE.messagePatterns.patterns) {
+                    if (pattern != null) filtered[idx++] = pattern;
+                }
+                INSTANCE.messagePatterns.patterns = filtered;
+            }
+        }
         INSTANCE.saveConfig(); //Re-write the config so new values get added after updates
     }
 
     @SuppressWarnings({"ResultOfMethodCallIgnored", "DuplicatedCode"})
     public void saveConfig() throws IOException {
+        // Ensure messagePatterns.patterns has no null elements before saving
+        if (messagePatterns != null && messagePatterns.patterns != null) {
+            int nonNullCount = 0;
+            for (MessagePatterns.MessagePattern pattern : messagePatterns.patterns) {
+                if (pattern != null) nonNullCount++;
+            }
+            if (nonNullCount < messagePatterns.patterns.length) {
+                MessagePatterns.MessagePattern[] filtered = new MessagePatterns.MessagePattern[nonNullCount];
+                int idx = 0;
+                for (MessagePatterns.MessagePattern pattern : messagePatterns.patterns) {
+                    if (pattern != null) filtered[idx++] = pattern;
+                }
+                messagePatterns.patterns = filtered;
+            }
+        }
         if (!configFile.exists()) {
             if (!configFile.getParentFile().exists()) configFile.getParentFile().mkdirs();
             configFile.createNewFile();
