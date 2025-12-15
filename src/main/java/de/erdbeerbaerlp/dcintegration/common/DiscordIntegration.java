@@ -207,6 +207,11 @@ public class DiscordIntegration {
     private APITestTask apiTest;
     private static Timer timer = new Timer();
 
+    /**
+     * Rate-limited message queue (if enabled)
+     */
+    private de.erdbeerbaerlp.dcintegration.common.util.ratelimit.RateLimitedMessageQueue rateLimitedQueue;
+
 
     public DiscordIntegration(final McServerInterface serverInterface) {
         System.setProperty("http.agent", "Discord Integration/"+VERSION+" (https://github.com/ErdbeerbaerLP/DiscordIntegration-Core)");
@@ -385,6 +390,15 @@ public class DiscordIntegration {
         timer.scheduleAtFixedRate(statusUpdater, 0, TimeUnit.SECONDS.toMillis(10));
         timer.scheduleAtFixedRate(messageSender, 0, TimeUnit.SECONDS.toMillis(1));
         timer.scheduleAtFixedRate(apiTest, 0, TimeUnit.MINUTES.toMillis(5));
+        
+        // Initialize rate-limited queue if enabled
+        if (Configuration.instance().rateLimiting.enabled) {
+            if (rateLimitedQueue == null) {
+                rateLimitedQueue = new de.erdbeerbaerlp.dcintegration.common.util.ratelimit.RateLimitedMessageQueue();
+                rateLimitedQueue.start();
+                LOGGER.info("Rate-limited message queue enabled");
+            }
+        }
 
         if (JSONInterface.jsonFile.exists() && !Configuration.instance().linking.databaseClass.equals(JSONInterface.class.getCanonicalName())) {
             LOGGER.info("PlayerLinks.json found, but using custom database implementation");
@@ -399,6 +413,9 @@ public class DiscordIntegration {
         timer.cancel();
         timer.purge();
         if (launchThread.isAlive()) launchThread.interrupt();
+        if (rateLimitedQueue != null) {
+            rateLimitedQueue.stop();
+        }
     }
 
 
@@ -561,6 +578,15 @@ public class DiscordIntegration {
      */
     public de.erdbeerbaerlp.dcintegration.common.util.template.TemplateEngine getTemplateEngine() {
         return templateEngine;
+    }
+
+    /**
+     * Gets the rate-limited message queue instance
+     *
+     * @return RateLimitedMessageQueue instance, or null if disabled
+     */
+    public de.erdbeerbaerlp.dcintegration.common.util.ratelimit.RateLimitedMessageQueue getRateLimitedQueue() {
+        return rateLimitedQueue;
     }
 
     public DBInterface getDatabaseInterface() {

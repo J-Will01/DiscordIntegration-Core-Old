@@ -103,6 +103,9 @@ public class Configuration {
     @TomlComment("Configure message pattern matching for regex-based message interception and replacement")
     public MessagePatterns messagePatterns = new MessagePatterns();
 
+    @TomlComment("Rate limiting and message queue configuration")
+    public RateLimiting rateLimiting = new RateLimiting();
+
     @TomlComment({"Configure some plugin-specific BStats settings here", "Everything can be seen here: https://bstats.org/plugin/bukkit/DiscordIntegration/9765", "", "Does not apply to fabric yet, as there is no bstats for it"})
     public BStats bstats = new BStats();
 
@@ -570,5 +573,25 @@ public class Configuration {
             @TomlComment("Embed color hex code (only used if asEmbed = true, e.g. #FFD700)")
             public String embedColor = "#808080";
         }
+    }
+
+    public static class RateLimiting {
+        @TomlComment({"Enable rate-limited message queue", "When enabled, messages are queued and sent respecting Discord rate limits"})
+        public boolean enabled = true;
+
+        @TomlComment({"Maximum requests per second", "Discord's limit is 50 requests per second per channel"})
+        public int maxRequestsPerSecond = 50;
+
+        @TomlComment({"Maximum backoff time in milliseconds", "When rate limited, wait up to this long before retrying"})
+        public long maxBackoffMs = 60000;
+
+        @TomlComment({"Maximum batch size", "Number of messages to send per processing cycle"})
+        public int maxBatchSize = 5;
+
+        @TomlComment({"Processing interval in milliseconds", "How often to check the queue for messages to send"})
+        public int processingIntervalMs = 100;
+
+        @TomlComment({"Maximum retry attempts", "How many times to retry a failed message before dropping it"})
+        public int maxRetries = 3;
     }
 }
