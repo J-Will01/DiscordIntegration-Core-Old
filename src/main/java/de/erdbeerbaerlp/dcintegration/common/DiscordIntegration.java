@@ -768,6 +768,10 @@ public class DiscordIntegration {
     public boolean togglePlayerIgnore(UUID uuid) {
         if (LinkManager.isPlayerLinked(uuid)) {
             final PlayerLink link = LinkManager.getLink(null, uuid);
+            if (link == null) {
+                LOGGER.warn("Player {} is marked as linked but getLink() returned null", uuid);
+                return true; // Default to not ignoring if link is null
+            }
             link.settings.ignoreDiscordChatIngame = !link.settings.ignoreDiscordChatIngame;
             LinkManager.addLink(link);
             return !link.settings.ignoreDiscordChatIngame;
@@ -1021,7 +1025,7 @@ public class DiscordIntegration {
                             final UUID uUUID = UUID.fromString(uuid);
                             if (LinkManager.isPlayerLinked(uUUID)) {
                                 final PlayerLink l = LinkManager.getLink(null, uUUID);
-                                if (l.settings.useDiscordNameInChannel) {
+                                if (l != null && l.settings.useDiscordNameInChannel) {
                                     final Member dc = getMemberById(Long.parseLong(l.discordID));
                                     if (dc != null) {
                                         roleColor = dc.getColorRaw();
@@ -1111,7 +1115,9 @@ public class DiscordIntegration {
         if (!Configuration.instance().linking.whitelistMode) return true;
         if (LinkManager.isPlayerLinked(uuid)) {
             if (Configuration.instance().linking.requiredRoles.length != 0) {
-                final Member mem = getMemberById(LinkManager.getLink(null, uuid).discordID);
+                final PlayerLink link = LinkManager.getLink(null, uuid);
+                if (link == null) return false;
+                final Member mem = getMemberById(link.discordID);
                 if (mem == null) return false;
                 final Guild g = getChannel().getGuild();
                 for (String requiredRole : Configuration.instance().linking.requiredRoles) {
@@ -1165,17 +1171,19 @@ public class DiscordIntegration {
             if (!isServerMessage && uUUID != null) {
                 if (LinkManager.isPlayerLinked(uUUID)) {
                     final PlayerLink l = LinkManager.getLink(null, uUUID);
-                    final Member dc = getMemberById(Long.parseLong(l.discordID));
-                    if (dc != null)
-                        if (l.settings.useDiscordNameInChannel) {
-                            pName = dc.getEffectiveName();
-                            avatarURL = dc.getUser().getAvatarUrl();
-                            // If Discord user has no custom avatar, avatarURL will be null
-                            // Set to empty string so fallback logic works
-                            if (avatarURL == null) {
-                                avatarURL = "";
+                    if (l != null) {
+                        final Member dc = getMemberById(Long.parseLong(l.discordID));
+                        if (dc != null)
+                            if (l.settings.useDiscordNameInChannel) {
+                                pName = dc.getEffectiveName();
+                                avatarURL = dc.getUser().getAvatarUrl();
+                                // If Discord user has no custom avatar, avatarURL will be null
+                                // Set to empty string so fallback logic works
+                                if (avatarURL == null) {
+                                    avatarURL = "";
+                                }
                             }
-                        }
+                    }
                 }
                 if (avatarURL != null && avatarURL.isEmpty()) {
                     String skinURL = getSkinURL();
