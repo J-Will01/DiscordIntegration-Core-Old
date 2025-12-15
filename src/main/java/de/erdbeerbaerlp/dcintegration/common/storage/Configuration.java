@@ -144,6 +144,17 @@ public class Configuration {
                 INSTANCE.messagePatterns.patterns = filtered;
             }
         }
+        
+        // Validate configuration
+        de.erdbeerbaerlp.dcintegration.common.storage.validation.ConfigValidator.ValidationResult validation = 
+            de.erdbeerbaerlp.dcintegration.common.storage.validation.ConfigValidator.validate(INSTANCE);
+        validation.logResults();
+        
+        if (validation.hasErrors()) {
+            DiscordIntegration.LOGGER.error("Configuration validation found {} error(s). Please fix them before continuing.", 
+                validation.getErrors().size());
+        }
+        
         INSTANCE.saveConfig(); //Re-write the config so new values get added after updates
     }
 
